@@ -573,15 +573,29 @@ function Login({onLogin,employees}) {
 function NewsModule({user,news,setNews}) {
   const [filter,setFilter]=useState("all");
   const [showForm,setShowForm]=useState(false);
-  const [form,setForm]=useState({cat:"hire",title:"",body:""});
+  const [form,setForm]=useState({cat:"hire",title:"",body:"",images:[]});
+  const [lightboxImg,setLightboxImg]=useState(null);
   const canWrite=user.role==="hr"||user.role==="admin";
   const catMap=Object.fromEntries(NEWS_CATS.map(c=>[c.id,c]));
   const filtered=filter==="all"?news:news.filter(n=>n.cat===filter);
   const sorted=[...filtered].sort((a,b)=>{if(a.pinned&&!b.pinned)return -1;if(!a.pinned&&b.pinned)return 1;return new Date(b.date)-new Date(a.date);});
+
+  const handleImages=e=>{
+    const files=Array.from(e.target.files);
+    const readers=files.map(file=>new Promise(res=>{
+      const r=new FileReader();
+      r.onload=ev=>res({id:uid(),url:ev.target.result,name:file.name});
+      r.readAsDataURL(file);
+    }));
+    Promise.all(readers).then(imgs=>setForm(f=>({...f,images:[...f.images,...imgs].slice(0,6)})));
+    e.target.value="";
+  };
+  const removeImg=id=>setForm(f=>({...f,images:f.images.filter(i=>i.id!==id)}));
+
   const publish=()=>{
     if(!form.title.trim()||!form.body.trim())return;
-    setNews(ns=>[{id:uid(),cat:form.cat,title:form.title.trim(),body:form.body.trim(),author:user.name,date:new Date().toISOString().slice(0,10),pinned:false},...ns]);
-    setForm({cat:"hire",title:"",body:""});setShowForm(false);
+    setNews(ns=>[{id:uid(),cat:form.cat,title:form.title.trim(),body:form.body.trim(),images:form.images,author:user.name,date:new Date().toISOString().slice(0,10),pinned:false},...ns]);
+    setForm({cat:"hire",title:"",body:"",images:[]});setShowForm(false);
   };
   return (
     <div>
@@ -607,8 +621,37 @@ function NewsModule({user,news,setNews}) {
           </div>
           <input className="inp" style={{marginBottom:8}} placeholder="Заголовок..." value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}/>
           <textarea className="ta" placeholder="Текст новости..." value={form.body} onChange={e=>setForm(f=>({...f,body:e.target.value}))} style={{minHeight:90}}/>
+          {/* Photo upload */}
+          <div style={{marginTop:10,marginBottom:10}}>
+            <div style={{fontSize:10.5,color:"#6B7280",fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:7}}>Фотографии (до 6)</div>
+            {form.images.length>0&&(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(80px,1fr))",gap:7,marginBottom:9}}>
+                {form.images.map(img=>(
+                  <div key={img.id} style={{position:"relative",aspectRatio:"1",borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,.1)"}}>
+                    <img src={img.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    <button onClick={()=>removeImg(img.id)} style={{position:"absolute",top:3,right:3,background:"rgba(0,0,0,.7)",border:"none",color:"#fff",width:18,height:18,borderRadius:"50%",fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                  </div>
+                ))}
+                {form.images.length<6&&(
+                  <label style={{aspectRatio:"1",borderRadius:8,border:"1.5px dashed rgba(14,110,196,.4)",background:"rgba(14,110,196,.05)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:20,color:"#0E6EC4"}}>
+                    +<input type="file" accept="image/*" multiple style={{display:"none"}} onChange={handleImages}/>
+                  </label>
+                )}
+              </div>
+            )}
+            {form.images.length===0&&(
+              <label style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",border:"1.5px dashed rgba(14,110,196,.3)",borderRadius:10,background:"rgba(14,110,196,.04)",cursor:"pointer"}}>
+                <div style={{width:38,height:38,borderRadius:9,background:"rgba(14,110,196,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🖼️</div>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#7BBFEF"}}>Прикрепить фото</div>
+                  <div style={{fontSize:11,color:"#4B5563",marginTop:2}}>JPG, PNG, WEBP · до 6 изображений</div>
+                </div>
+                <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={handleImages}/>
+              </label>
+            )}
+          </div>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:11}}>
-            <button className="btn bo" onClick={()=>setShowForm(false)}>Отмена</button>
+            <button className="btn bo" onClick={()=>{setShowForm(false);setForm({cat:"hire",title:"",body:"",images:[]});}}>Отмена</button>
             <button className="btn bp" onClick={publish} disabled={!form.title.trim()||!form.body.trim()}>Опубликовать</button>
           </div>
         </div>
@@ -632,10 +675,35 @@ function NewsModule({user,news,setNews}) {
                 </div>
               )}
             </div>
-            <div className="ncbody">{n.body}</div>
+            <div className="ncbody" style={{marginBottom:(n.images&&n.images.length>0)?10:0}}>{n.body}</div>
+            {/* Image grid */}
+            {n.images&&n.images.length>0&&(
+              <div style={{paddingLeft:48}}>
+                {n.images.length===1&&<img src={n.images[0].url} alt="" onClick={()=>setLightboxImg(n.images[0].url)} style={{width:"100%",maxHeight:280,objectFit:"cover",borderRadius:9,cursor:"zoom-in",border:"1px solid rgba(255,255,255,.08)"}}/>}
+                {n.images.length===2&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>{n.images.map(img=><img key={img.id} src={img.url} alt="" onClick={()=>setLightboxImg(img.url)} style={{width:"100%",aspectRatio:"4/3",objectFit:"cover",borderRadius:8,cursor:"zoom-in"}}/>)}</div>}
+                {n.images.length>=3&&(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                    {n.images.slice(0,3).map(img=><img key={img.id} src={img.url} alt="" onClick={()=>setLightboxImg(img.url)} style={{width:"100%",aspectRatio:"4/3",objectFit:"cover",borderRadius:8,cursor:"zoom-in"}}/>)}
+                    {n.images.length>3&&(
+                      <div style={{position:"relative",aspectRatio:"4/3",cursor:"pointer",borderRadius:8,overflow:"hidden"}} onClick={()=>setLightboxImg(n.images[3].url)}>
+                        <img src={n.images[3].url} alt="" style={{width:"100%",height:"100%",objectFit:"cover",filter:"brightness(.4)"}}/>
+                        <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Manrope,sans-serif",fontSize:22,fontWeight:800,color:"#fff"}}>+{n.images.length-3}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
+      {/* Lightbox */}
+      {lightboxImg&&(
+        <div onClick={()=>setLightboxImg(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20,cursor:"zoom-out"}}>
+          <img src={lightboxImg} alt="" style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:10,objectFit:"contain"}}/>
+          <button onClick={()=>setLightboxImg(null)} style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,.12)",border:"none",color:"#fff",width:38,height:38,borderRadius:"50%",fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
