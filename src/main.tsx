@@ -2,13 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 
 // @ts-ignore
-import * as HrModule from './hr-app.jsx'
+import App from './hr-app.jsx'
 
-// @ts-ignore
-const App = HrModule.default || HrModule
+const root = document.getElementById('root')!
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+ReactDOM.createRoot(root).render(
+  React.createElement(App)
 )
