@@ -2864,7 +2864,7 @@ function TicketsModule({user,tickets,setTickets}) {
                   ▶ Взять в работу
                 </button>
               )}
-              <button style={{\...btnPrimary,opacity:reply.trim()?1:0.45,cursor:reply.trim()?"pointer":"not-allowed"}} onClick={sendReply} disabled={!reply.trim()} >
+              <button style={{...btnPrimary,opacity:reply.trim()?1:0.45,cursor:reply.trim()?"pointer":"not-allowed"}} onClick={sendReply} disabled={!reply.trim()} >
                 Отправить
               </button>
             </div>
