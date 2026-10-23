@@ -297,6 +297,16 @@ ${theme==="a"?`:root{--tx:#0F172A;--tx2:#5B6B7E;--bd:#E2E8F0;--sf2:#F7F9FB;--ac2
 body{font-family:${theme==="a"?"'Inter'":theme==="b"?"'IBM Plex Sans','Inter'":"'Golos Text','Inter'"},sans-serif}
 .sbnav{overflow-y:auto!important;overflow-x:hidden}
 .main{min-width:0}
+/* ── Меню, вариант 1: строгие линейные иконки ── */
+.sbnav{padding:10px 12px!important}
+.ni{gap:11px!important;padding:9px 12px!important;font-size:13.5px!important;border-radius:8px!important}
+.ni-icon{width:20px!important;display:flex!important;align-items:center;justify-content:center;font-size:0!important;color:#7C8796}
+.ni.active .ni-icon{color:currentColor}
+.nibadge{position:static!important;transform:none!important;margin-left:auto;min-width:20px;height:20px;padding:0 6px!important;box-sizing:border-box;border-radius:6px!important;background:rgba(255,255,255,.12)!important;color:#FFFFFF!important;font-size:11px!important;display:inline-flex;align-items:center;justify-content:center}
+.ni.active .nibadge{background:rgba(255,255,255,.22)!important}
+.sidebar.coll .nibadge{position:absolute!important;top:2px;right:2px;min-width:16px;height:16px;font-size:9.5px!important;padding:0 4px!important}
+.themebtn,.logoutbtn{display:flex!important;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px!important;font-size:0!important}
+.themebtn:hover,.logoutbtn:hover{background:rgba(127,127,127,.15)!important}
 .sbnav::-webkit-scrollbar{width:4px}.sbnav::-webkit-scrollbar-thumb{background:rgba(127,127,127,.3);border-radius:4px}
 .langbtn{border:1px solid var(--bd);background:var(--sf);color:var(--tx2);font-size:11px;font-weight:700;padding:5px 9px;border-radius:7px;cursor:pointer;font-family:'Inter',sans-serif}
 .langbtn.on{background:var(--ac);border-color:var(--ac);color:#fff}
@@ -352,8 +362,13 @@ ${theme!=="c"?`
 .btn.bg2{background:#E3F5EC!important;color:#11643F!important;border-color:#C6EBD8!important}
 .tb.act{color:var(--ac2)!important}
 select.inp{background-repeat:no-repeat!important;background-position:right 11px center!important}
-.ni.active{color:var(--ac2)!important;background:var(--acbg)!important;box-shadow:none!important}
-.ni:hover{color:var(--ac2)!important;background:var(--acbg)!important}
+.ni{color:#3F3F46!important}
+.ni-icon{color:#78716C}
+.ni.active{color:#18181B!important;background:#F1F0EF!important;box-shadow:none!important;font-weight:600}
+.ni:hover{color:#18181B!important;background:#F5F5F4!important}
+.ni.active .ni-icon{color:#18181B}
+.nibadge{background:#EDEBEA!important;color:#3F3F46!important}
+.ni.active .nibadge{background:#E2DFDC!important}
 .nf-btn.sel{color:var(--ac2)!important}
 .lcard h1,.llogo h1{color:var(--tx)!important}
 .ltitle{color:var(--tx)!important}
@@ -368,6 +383,8 @@ body,.app,.main{background:#F3F6F9!important}
 .ni{color:#C9D6E4!important}
 .ni:hover{color:#FFFFFF!important;background:rgba(255,255,255,.08)!important}
 .ni.active{color:#FFFFFF!important;background:#1B4470!important;font-weight:600}
+.ni-icon{color:#9FB3C8!important}.ni:hover .ni-icon,.ni.active .ni-icon{color:#FFFFFF!important}
+.nibadge{background:rgba(255,255,255,.12)!important;color:#FFFFFF!important}.ni.active .nibadge{background:rgba(255,255,255,.22)!important}
 .sbuser{border-top-color:rgba(255,255,255,.1)!important}
 .uname{color:#FFFFFF!important}.urole{color:#B6C6D8!important}
 .logoutbtn,.themebtn{color:#C9D6E4!important}
@@ -378,7 +395,10 @@ body,.app,.main{background:#F3F6F9!important}
 `:""}
 ${theme==="c"?`
 .wb{background:linear-gradient(135deg,#2E1F15 0%,#1D2126 60%,#181B1F 100%)!important;border-color:rgba(255,122,26,.25)!important}
-.ni.active{background:#2E1F15!important;color:#FF9A4D!important;box-shadow:inset 0 0 0 1px rgba(255,122,26,.3)!important}
+.ni{color:#A1A1AA!important}.ni-icon{color:#71717A}
+.ni.active{background:#24282D!important;color:#FFFFFF!important;box-shadow:none!important;font-weight:600}
+.ni:hover{background:#1D2126!important;color:#E4E4E7!important}
+.ni.active .ni-icon{color:#FFFFFF}
 .bp,.lbtn{background:linear-gradient(135deg,#FF7A1A,#E5650F)!important}
 `:""}
 ` ;
@@ -3616,6 +3636,40 @@ const I18N = {
   },
 };
 
+
+/* ── Иконки меню (линейные, единый стиль) ── */
+const NAV_PATHS = {
+  home: ["M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"],
+  news: ["M4 5h12a1 1 0 0 1 1 1v12a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2z", "M17 9h3v9a2 2 0 0 1-2 2", "M8 9h5M8 13h5M8 17h3"],
+  hr: ["M9 4.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z", "M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6", "M16 4.6a3.5 3.5 0 0 1 0 6.8", "M21 20c0-2.5-1.5-4.6-3.8-5.5"],
+  orders: ["M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z", "M14 3v5h5", "M8.5 13h7M8.5 17h4"],
+  orders_sign: ["M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z", "M14.5 7.5l3 3", "M13 20h7"],
+  vacancies: ["M5 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z", "M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2", "M3 13h18"],
+  enbek: ["M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1", "M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"],
+  time: ["M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z", "M12 7v5l3.2 2"],
+  policies: ["M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z", "M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3", "M9 7.5h6"],
+  reports: ["M3 21h18", "M6.5 17v-5M11.5 17V7M16.5 17v-8"],
+  tickets: ["M3 13h5l1.5 3h5L16 13h5", "M5.5 5h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"],
+  surveys: ["M7 4h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z", "M9 2.5h6v3H9z", "m9 13 2 2 4-4"],
+  profile: ["M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8z", "M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"],
+  adaptation: ["M12 21v-9", "M12 12C12 7.6 8.4 5 4 5c0 4.4 3.6 7 8 7z", "M12 14c0-4 3.2-6.5 8-6.5 0 4-3.2 6.5-8 6.5z"],
+  annual: ["M12 3l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.4l-5.2 2.8 1-5.9L3.5 9.2l5.9-.8z"],
+  development: ["M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z", "M12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10z", "M12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"],
+  learning: ["M2 9l10-5 10 5-10 5z", "M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5", "M22 9v6"],
+  admin: ["M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z", "M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"],
+  logout: ["M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3", "m10 16-4-4 4-4", "M6 12h10"],
+  theme: ["M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z", "M12 3v18"],
+};
+function NavIcon({ k, size = 18 }) {
+  const ps = NAV_PATHS[k] || NAV_PATHS.home;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block", flexShrink: 0 }}>
+      {ps.map((d, i) => <path key={i} d={d} />)}
+      {k === "theme" && <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}
+
 /* ── Оформление ── */
 const THEMES = [
   { id: "a", sw: ["#0F2A44", "#F3F6F9", "#C2410C"] },
@@ -5654,7 +5708,7 @@ export default function App() {
           <nav className="sbnav">
             {navItems.map(item => (
               <div key={item.id} className={`ni ${mod === item.id ? "active" : ""}`} onClick={() => nav(item.id)} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && nav(item.id)}>
-                <span className="ni-icon">{item.icon}</span>
+                <span className="ni-icon"><NavIcon k={item.id} /></span>
                 <span className="ni-label">{item.label || t[item.id]}</span>
                 {item.badge > 0 && <span className="nibadge">{item.badge}</span>}
               </div>
@@ -5666,8 +5720,8 @@ export default function App() {
               <div className="uname">{user.name.split(" ").slice(0, 2).join(" ")}</div>
               <div className="urole">{t["role_" + user.role]}</div>
             </div>
-            <button className="themebtn" onClick={cycleTheme} title={t.theme}>🎨</button>
-            <button className="logoutbtn" onClick={() => { setUser(null); setMod("home"); }} title={t.logout}>⏻</button>
+            <button className="themebtn" onClick={cycleTheme} title={t.theme} aria-label={t.theme}><NavIcon k="theme" size={17} /></button>
+            <button className="logoutbtn" onClick={() => { setUser(null); setMod("home"); }} title={t.logout} aria-label={t.logout}><NavIcon k="logout" size={17} /></button>
           </div>
         </aside>
         <main className={mainCls}>
