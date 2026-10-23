@@ -3783,31 +3783,72 @@ function OrderPaper({ order, people, compact }) {
   );
 }
 
-/* PDF: печатная форма для HR и директора */
-function printOrderPDF(order, people) {
+/* PDF-файл для HR и директора: приказ + подпись + лист ознакомления (скачивается сразу) */
+let _pdfMake = null;
+async function getPdfMake() {
+  if (_pdfMake) return _pdfMake;
+  const pm = await import("pdfmake/build/pdfmake");
+  const vf = await import("pdfmake/build/vfs_fonts");
+  const pdfMake = pm.default || pm;
+  const vfs = vf.default || vf;
+  pdfMake.vfs = vfs.pdfMake ? vfs.pdfMake.vfs : vfs;
+  pdfMake.fonts = { Roboto: { normal: "Roboto-Regular.ttf", bold: "Roboto-Medium.ttf", italics: "Roboto-Italic.ttf", bolditalics: "Roboto-MediumItalic.ttf" } };
+  _pdfMake = pdfMake;
+  return pdfMake;
+}
+function orderDocDefinition(order, people) {
   const dir = personOf(people, order.signedBy);
-  const rows = order.recipients.map((r, i) => { const p = personOf(people, r); const a = order.acks[r]; return `<tr><td>${i + 1}</td><td>${escHTML(p.name)}</td><td>${escHTML(p.pos || "")}</td><td>${a ? ruDT(a) : "—"}</td><td>${a ? "Ознакомлен(а) в HR-портале" : "Не ознакомлен(а)"}</td></tr>`; }).join("");
-  const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Приказ № ${escHTML(orderNo(order))}</title>
-<style>@page{size:A4;margin:18mm 16mm}body{font-family:'PT Serif',Georgia,serif;color:#111;font-size:13px;line-height:1.6;margin:0}
-.pg{page-break-after:always}.pg:last-child{page-break-after:auto}.lh{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid #111}
-.lh img{width:52px;height:52px}h1{text-align:center;font-size:17px;letter-spacing:2px;margin:18px 0 8px}.row{display:flex;justify-content:space-between}
-.sig{border:1.5px solid #11643F;border-radius:8px;padding:12px 14px;color:#0F3D26;font-family:Arial,sans-serif;font-size:12px;margin-top:18px}
-table{width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;margin-top:12px}td,th{border:1px solid #444;padding:6px 7px;text-align:left;vertical-align:top}th{background:#eee}
-.body{white-space:pre-wrap}.muted{font-family:Arial,sans-serif;font-size:11px;color:#444}</style></head><body>
-<div class="pg"><div class="lh"><img src="${MKA_LOGO}" alt=""><div><b>${escHTML(COMPANY.name)}</b><br><span class="muted">${escHTML(COMPANY.city)}</span></div></div>
-<h1>ПРИКАЗ</h1><div class="row"><span>${ruDate(order.date)}</span><span>№ ${escHTML(orderNo(order))}</span><span>${escHTML(COMPANY.city)}</span></div>
-<p><b>${escHTML(order.title)}</b></p><div class="body">${escHTML(order.body)}</div>
-${order.attachments?.length ? `<p class="muted">Приложения: ${escHTML(order.attachments.map(a => a.name).join(", "))}</p>` : ""}
-<div class="row" style="margin-top:34px"><b>Директор</b><span>${escHTML(shortName(dir.name))}</span></div>
-<div class="sig"><b>ДОКУМЕНТ ПОДПИСАН В HR-ПОРТАЛЕ ${escHTML(COMPANY.short.toUpperCase())}</b><br>Подписант: ${escHTML(dir.name)}, Директор, ${escHTML(COMPANY.name)}<br>Дата и время подписи: ${ruDT(order.signedAt)} (UTC+5)<br>Код проверки: ${escHTML(order.sigId || order.id)}</div></div>
-<div class="pg"><div class="lh"><img src="${MKA_LOGO}" alt=""><div><b>${escHTML(COMPANY.name)}</b></div></div>
-<h1 style="font-size:15px">ЛИСТ ОЗНАКОМЛЕНИЯ</h1><p class="muted" style="text-align:center">с приказом № ${escHTML(orderNo(order))} от ${ruDate(order.date)} «${escHTML(order.title)}»</p>
-<table><thead><tr><th>№</th><th>ФИО</th><th>Должность</th><th>Дата и время</th><th>Отметка</th></tr></thead><tbody>${rows || `<tr><td colspan="5">Список ознакомления пуст</td></tr>`}</tbody></table>
-<p class="muted" style="margin-top:14px">Ознакомление подтверждено каждым сотрудником в личном кабинете HR-портала ${escHTML(COMPANY.short)}. Дата и время фиксируются автоматически и не редактируются. Сформировано: ${ruDT(new Date().toISOString())}.</p></div>
-<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`;
-  const w = window.open("", "_blank");
-  if (!w) { alert("Разрешите всплывающие окна для скачивания PDF"); return; }
-  w.document.open(); w.document.write(html); w.document.close();
+  const head = () => ({
+    columns: [{ image: MKA_LOGO, width: 46 }, { stack: [{ text: COMPANY.name, bold: true, fontSize: 12 }, { text: COMPANY.city, fontSize: 9, color: "#444444" }], margin: [10, 8, 0, 0] }],
+    margin: [0, 0, 0, 0],
+  });
+  const headBlock = () => ({ table: { widths: ["*"], body: [[head()]] }, layout: { hLineWidth: i => (i === 1 ? 1 : 0), vLineWidth: () => 0, paddingLeft: () => 0, paddingRight: () => 0, paddingBottom: () => 6 }, margin: [0, 0, 0, 14] });
+  const rows = order.recipients.map((r, i) => { const p = personOf(people, r); const a = order.acks[r]; return [String(i + 1), p.name, p.pos || "", a ? ruDT(a) : "—", a ? "Ознакомлен(а) в HR-портале" : "Не ознакомлен(а)"]; });
+  return {
+    pageSize: "A4", pageMargins: [40, 40, 40, 40],
+    info: { title: `Приказ № ${orderNo(order)}`, author: COMPANY.name },
+    defaultStyle: { font: "Roboto", fontSize: 11 },
+    content: [
+      headBlock(),
+      { text: "ПРИКАЗ", alignment: "center", bold: true, fontSize: 15, characterSpacing: 2, margin: [0, 4, 0, 10] },
+      { columns: [{ text: ruDate(order.date) }, { text: `№ ${orderNo(order)}`, alignment: "center" }, { text: COMPANY.city, alignment: "right" }], margin: [0, 0, 0, 14] },
+      { text: order.title, bold: true, margin: [0, 0, 0, 10] },
+      { text: order.body, lineHeight: 1.3, margin: [0, 0, 0, 10] },
+      order.attachments && order.attachments.length ? { text: "Приложения: " + order.attachments.map(a => a.name).join(", "), fontSize: 9, color: "#444444", margin: [0, 0, 0, 10] } : "",
+      { columns: [{ text: "Директор", bold: true }, { text: shortName(dir.name), alignment: "right" }], margin: [0, 26, 0, 12] },
+      {
+        table: { widths: ["*"], body: [[{ stack: [
+          { text: `ДОКУМЕНТ ПОДПИСАН В HR-ПОРТАЛЕ ${COMPANY.short.toUpperCase()}`, bold: true, fontSize: 10 },
+          { text: `Подписант: ${dir.name}, Директор, ${COMPANY.name}`, fontSize: 9.5 },
+          { text: `Дата и время подписи: ${ruDT(order.signedAt)} (UTC+5)`, fontSize: 9.5 },
+          { text: `Код проверки: ${order.sigId || order.id}`, fontSize: 9.5 },
+        ], color: "#0F3D26", margin: [8, 6, 8, 6] }]] },
+        layout: { hLineColor: () => "#11643F", vLineColor: () => "#11643F", hLineWidth: () => 1.2, vLineWidth: () => 1.2 },
+      },
+      { text: "", pageBreak: "after" },
+      headBlock(),
+      { text: "ЛИСТ ОЗНАКОМЛЕНИЯ", alignment: "center", bold: true, fontSize: 13, characterSpacing: 1.5, margin: [0, 4, 0, 4] },
+      { text: `с приказом № ${orderNo(order)} от ${ruDate(order.date)} «${order.title}»`, alignment: "center", fontSize: 9.5, color: "#444444", margin: [0, 0, 0, 12] },
+      {
+        table: { headerRows: 1, widths: [20, "*", 110, 85, 95], body: [
+          ["№", "ФИО", "Должность", "Дата и время", "Отметка"].map(t => ({ text: t, bold: true, fillColor: "#EEEEEE" })),
+          ...(rows.length ? rows : [[{ text: "Список ознакомления пуст", colSpan: 5 }, "", "", "", ""]]),
+        ] },
+        fontSize: 9.5,
+      },
+      { text: `Ознакомление подтверждено каждым сотрудником в личном кабинете HR-портала ${COMPANY.short}. Дата и время фиксируются автоматически и не редактируются. Сформировано: ${ruDT(new Date().toISOString())}.`, fontSize: 8.5, color: "#444444", margin: [0, 12, 0, 0] },
+    ],
+  };
+}
+async function printOrderPDF(order, people) {
+  try {
+    const pdfMake = await getPdfMake();
+    const name = `Приказ_${orderNo(order).replace(/\//g, "")}_${ruDate(order.date)}.pdf`;
+    pdfMake.createPdf(orderDocDefinition(order, people)).download(name);
+  } catch (e) {
+    console.error(e);
+    alert("Не удалось сформировать PDF. Обновите страницу и попробуйте ещё раз.");
+  }
 }
 
 function exportJournal(orders, people, typeFilter) {
