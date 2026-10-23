@@ -305,6 +305,13 @@ body{font-family:${theme==="a"?"'Inter'":theme==="b"?"'IBM Plex Sans','Inter'":"
 .ord-head{font-size:11px!important;font-weight:700;color:var(--tx2)!important;text-transform:uppercase;letter-spacing:.4px;background:var(--sf2);cursor:default}
 .pol-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 80px 100px 100px;gap:12px;padding:12px 16px;align-items:center;font-size:13px;color:var(--tx);border-bottom:1px solid var(--bd);cursor:pointer}
 .pol-row:last-child{border-bottom:none}.pol-row:hover{background:var(--sf2)}
+.en-row{display:grid;grid-template-columns:minmax(0,1.5fr) 120px minmax(0,1fr) 150px 150px 130px;gap:10px;padding:11px 16px;align-items:center;font-size:13px;color:var(--tx);border-bottom:1px solid var(--bd);cursor:pointer}
+.en-row:last-child{border-bottom:none}.en-row:hover{background:var(--sf2)}
+.vac-row{display:grid;grid-template-columns:minmax(0,1.8fr) 140px 60px 180px 120px 150px;gap:10px;padding:11px 16px;align-items:center;font-size:13px;color:var(--tx);border-bottom:1px solid var(--bd);cursor:pointer}
+.vac-row:last-child{border-bottom:none}.vac-row:hover{background:var(--sf2)}
+.lg-row{display:grid;grid-template-columns:130px 140px 150px minmax(0,1fr) minmax(0,1.4fr) 60px;gap:10px;padding:10px 16px;align-items:center;font-size:12.5px;color:var(--tx);border-bottom:1px solid var(--bd)}
+.lg-row:last-child{border-bottom:none}
+@media(max-width:900px){.en-row,.vac-row,.lg-row{grid-template-columns:minmax(0,1fr) 140px}.en-row>span:nth-child(n+3):not(:nth-child(5)),.vac-row>span:nth-child(n+2):not(:nth-child(4)),.lg-row>span:nth-child(n+3):not(:nth-child(5)){display:none}}
 .tm-row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 80px 80px 70px 150px;gap:10px;padding:11px 16px;align-items:center;font-size:13px;color:var(--tx);border-bottom:1px solid var(--bd)}
 .tm-row:last-child{border-bottom:none}.tm-row.tm-head{font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;background:var(--sf2)}
 .tm-row.tm8{grid-template-columns:minmax(0,2fr) repeat(7,minmax(0,1fr))}
@@ -3585,6 +3592,7 @@ const I18N = {
     s_orders_hr: "Создание, подписание, ознакомление и учёт по 4 журналам", s_orders_dir: "Журнал приказов компании", s_orders: "Приказы для ознакомления",
     s_sign: "Приказы, ожидающие вашей подписи", s_time_hr: "Отметки по QR, табель и заявки", s_time: "Мои отметки, табель и заявки",
     s_policies_hr: "Внутренние HR-документы: версии и ознакомление", s_policies: "Документы компании для ознакомления",
+    vacancies: "Вакансии", enbek: "Enbek · ЕСУТД", s_vacancies: "Заявки на вакансии и публикация на Enbek.kz", s_enbek: "Трудовые договоры в ЕСУТД, сверка и журнал обмена",
   },
   kz: {
     home: "Басты бет", news: "Жаңалықтар", adaptation: "Бейімделу", annual: "Жылдық бағалау", development: "Даму аймақтары",
@@ -3604,6 +3612,7 @@ const I18N = {
     s_orders_hr: "4 журнал бойынша жасау, қол қою, танысу және есеп", s_orders_dir: "Компания бұйрықтарының журналы", s_orders: "Танысуға арналған бұйрықтар",
     s_sign: "Қол қоюыңызды күтетін бұйрықтар", s_time_hr: "QR белгілері, табель және өтінімдер", s_time: "Менің белгілерім, табель және өтінімдер",
     s_policies_hr: "Ішкі HR-құжаттар: нұсқалар және танысу", s_policies: "Танысуға арналған компания құжаттары",
+    vacancies: "Бос орындар", enbek: "Enbek · ЕСУТД", s_vacancies: "Бос орындарға өтінімдер және Enbek.kz-ке жариялау", s_enbek: "ЕСУТД-дағы еңбек шарттары, салыстыру және алмасу журналы",
   },
 };
 
@@ -4810,6 +4819,611 @@ function PoliciesModule({ user, policies, setPolicies, employees }) {
   return <PoliciesEmployee policies={policies} setPolicies={setPolicies} user={user} />;
 }
 
+/* ═════════════════════ ИНТЕГРАЦИЯ С ENBEK.KZ (ЕСУТД / ЭБТ) ═════════════════════
+   Сервисы SmartBridge:
+     MINTRUD-S-0356 — регистрация учётных данных трудовых договоров, допсоглашений, расторжений (ВШЭП)
+     MINTRUD-S-3023 — синхронизация данных о трудовых договорах ИС клиента с ЕСУТД (ВШЭП)
+     MINTRUD-S-6167 — приём данных по предприятиям, вакансиям и соискателям, ENBEK_RT_8085 (вне ЕТС ГО)
+   Сейчас работает ЭМУЛЯТОР (enbekCall). После подключения заменить тело enbekCall на запрос к серверу портала:
+     fetch(`${API}/enbek/${service}/${op}`, { method: "POST", body: JSON.stringify(payload) })
+   Сервер подписывает SOAP-запрос ЭЦП компании и отправляет через ВШЭП. */
+const ENBEK_SERVICES = [
+  { code: "MINTRUD-S-0356", name: "Регистрация трудовых договоров, допсоглашений и расторжений в ЕСУТД", contour: "ВШЭП", sys: "ЕСУТД" },
+  { code: "MINTRUD-S-3023", name: "Синхронизация данных о трудовых договорах с ЕСУТД", contour: "ВШЭП", sys: "ЕСУТД" },
+  { code: "MINTRUD-S-6167", name: "Приём данных по предприятиям, вакансиям и соискателям (ENBEK_RT_8085)", contour: "Вне ЕТС ГО", sys: "Электронная биржа труда" },
+];
+const EV_TYPES = {
+  conclusion: { label: "Заключение договора", due: { work: 5 }, op: "registerContract" },
+  amendment: { label: "Допсоглашение", due: { cal: 15 }, op: "registerAmendment" },
+  termination: { label: "Расторжение", due: { work: 3 }, op: "registerTermination" },
+};
+const EV_STATUS = { queued: { l: "В очереди", t: "gr" }, sending: { l: "Отправляется…", t: "info" }, registered: { l: "Зарегистрировано", t: "ok" }, error: { l: "Ошибка", t: "err" } };
+const TERM_BASIS = ["Соглашение сторон (ст. 50 ТК РК)", "Истечение срока договора (ст. 51 ТК РК)", "Инициатива работодателя (ст. 52 ТК РК)", "Инициатива работника (ст. 56 ТК РК)", "Обстоятельства вне воли сторон (ст. 58 ТК РК)"];
+const PROF_AREAS = ["Продажи", "Закупки, снабжение", "Логистика, склад", "Бухгалтерия, финансы", "ВЭД", "Административный персонал", "Транспорт", "Производство", "Юриспруденция", "IT"];
+const EDU_LEVELS = ["Не важно", "Среднее", "Среднее специальное", "Высшее"];
+const EXP_LEVELS = ["Без опыта", "От 1 года", "От 3 лет", "От 5 лет"];
+const LANGS = ["Казахский", "Русский", "Английский", "Китайский"];
+const SCHEDULES = ["Полный день", "Сменный график", "Вахтовый метод", "Гибкий график"];
+const EMPLOYMENT = ["Полная занятость", "Частичная занятость", "Временная работа"];
+const VAC_STATUS = {
+  draft: { l: "Черновик", t: "gr" }, review: { l: "У HR", t: "info" }, approval: { l: "На согласовании", t: "warn" }, returned: { l: "Возвращена", t: "err" },
+  publishing: { l: "Публикуется…", t: "info" }, published: { l: "Опубликована на Enbek", t: "ok" }, error: { l: "Ошибка Enbek", t: "err" }, closed: { l: "Закрыта", t: "gr" },
+};
+const FINE_ESUTD = "до 100 МРП (432 500 ₸) для среднего бизнеса, ст. 98 КоАП";
+
+const addCalDays = (iso, n) => { const d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString(); };
+const evDue = ev => { const r = EV_TYPES[ev.type].due; const base = (ev.date || todayISO()) + "T09:00:00"; return r.work ? addWorkDays(base, r.work) : addCalDays(base, r.cal); };
+const daysLeft = iso => Math.ceil((new Date(iso) - new Date()) / 86400000);
+const rid = p => `${p}-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+function soapXml(service, op, payload) {
+  const body = Object.entries(payload).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([k, v]) => `      <${k}>${escHTML(Array.isArray(v) ? v.join(", ") : v)}</${k}>`).join("\n");
+  return `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Header>
+    <serviceId>${service}</serviceId>
+    <messageId>${uid()}-${Date.now()}</messageId>
+    <messageDate>${new Date().toISOString()}</messageDate>
+    <sender>MKA_HR_PORTAL</sender>
+    <!-- подпись ЭЦП ИС (транспортный сертификат НУЦ РК) добавляется на сервере -->
+  </soapenv:Header>
+  <soapenv:Body>
+    <${op}>
+${body}
+    </${op}>
+  </soapenv:Body>
+</soapenv:Envelope>`;
+}
+
+/* ── ЭМУЛЯТОР сервисов (детерминированная проверка обязательных полей) ── */
+async function enbekCall(service, op, payload) {
+  await new Promise(r => setTimeout(r, 700));
+  const err = (code, message) => ({ ok: false, code, message });
+  if (service === "MINTRUD-S-0356") {
+    if (!/^\d{12}$/.test(payload.iin || "")) return err("ESUTD-101", "ИИН работника должен содержать 12 цифр");
+    if (op !== "registerTermination") {
+      if (!payload.position) return err("ESUTD-102", "Не указана должность (трудовая функция)");
+      if (!payload.workplace) return err("ESUTD-103", "Не указано место выполнения работы");
+    }
+    if (!payload.contractNumber) return err("ESUTD-104", "Не указан номер трудового договора");
+    if (op === "registerTermination" && !payload.terminationBasis) return err("ESUTD-105", "Не указано основание расторжения");
+    return { ok: true, id: (op === "registerContract" ? "ЕСУТД-" : op === "registerAmendment" ? "ДС-" : "РТ-") + String(Math.floor(1e7 + Math.random() * 9e7)), message: "Сведения зарегистрированы в ЕСУТД" };
+  }
+  if (service === "MINTRUD-S-6167") {
+    if (op === "closeVacancy") return { ok: true, id: payload.enbekId, message: "Вакансия снята с публикации" };
+    if (!payload.positionName) return err("EBT-201", "Не указано наименование должности");
+    if (!payload.region) return err("EBT-202", "Не указан город / район");
+    if (!payload.duties || payload.duties.length < 20) return err("EBT-203", "Должностные обязанности: не менее 20 символов");
+    if (!(payload.vacantCount >= 1)) return err("EBT-204", "Количество вакантных мест должно быть не меньше 1");
+    return { ok: true, id: "ЭБТ-" + String(Math.floor(1e6 + Math.random() * 9e6)), message: "Вакансия принята и опубликована на Электронной бирже труда" };
+  }
+  if (service === "MINTRUD-S-3023") return { ok: true, message: "Данные ЕСУТД получены" };
+  return err("SB-404", "Сервис не найден");
+}
+
+const INIT_ENBEK = () => {
+  const ago = k => { const d = new Date(); d.setDate(d.getDate() - k); return isoDay(d); };
+  const reg = (date, id) => ({ id: uid(), type: "conclusion", date, status: "registered", esutdId: id, sentAt: date + "T10:00:00.000Z" });
+  const c = (id, empId, iin, number, date, position, dept, salary, evs) => ({ id, empId, iin, number, date, start: date, kind: "indefinite", end: "", position, dept, workplace: `${COMPANY.city}`, salary, mode: "Полный рабочий день", events: evs || [reg(date, "ЕСУТД-" + iin.slice(-8))] });
+  const contracts = [
+    c("c1", "e1", "000000000101", "ТД-2026/014", "2026-09-21", "Менеджер по продажам", "Продажи", 350000),
+    c("c2", "e2", "000000000102", "ТД-2025/006", "2025-03-10", "Заведующий складом", "Логистика и склад", 420000),
+    c("c3", "e3", "000000000103", "ТД-2024/021", "2024-11-04", "Специалист по ВЭД", "Закупки и ВЭД", 400000),
+    c("c4", "e4", "000000000104", "ТД-2026/019", ago(11), "Менеджер по продажам", "Продажи", 330000, [{ id: uid(), type: "conclusion", date: ago(11), status: "error", error: "ESUTD-101: ИИН работника должен содержать 12 цифр", sentAt: new Date().toISOString() }]),
+    c("c5", "e5", "000000000105", "ТД-2023/008", "2023-06-01", "Бухгалтер", "Бухгалтерия", 380000),
+  ];
+  contracts[3].iin = "00000000104";
+  const esutd = {};
+  contracts.forEach(k => { if (k.events.some(e => e.status === "registered")) esutd[k.id] = { iin: k.iin, number: k.number, position: k.position, dept: k.dept, salary: k.salary, status: "active" }; });
+  esutd.c3.position = "Специалист по закупкам"; // расхождение для сверки
+  esutd.x1 = { iin: "000000000199", number: "ТД-2022/011", name: "Работник (уволен в портале, не расторгнут в ЕСУТД)", position: "Водитель-экспедитор", dept: "Логистика и склад", salary: 300000, status: "active" };
+  return {
+    contracts, esutd,
+    vacancies: [
+      { id: "v1", positionName: "Водитель-экспедитор", spec: "категория C, перевозка опасных грузов (ДОПОГ)", profArea: "Транспорт", region: COMPANY.city, locality: "Алматы", address: "", count: 2, salaryFrom: 350000, salaryTo: 450000, schedule: "Полный день", employment: "Полная занятость", experience: "От 3 лет", education: "Среднее специальное", languages: ["Казахский", "Русский"], qualities: "Ответственность, пунктуальность", duties: "Доставка химических реагентов клиентам, оформление ТТН, контроль сохранности груза в пути.", pubDays: 30, dept: "Логистика и склад", authorId: "e2", status: "approval", history: [{ at: ago(1) + "T09:10:00.000Z", by: "e2", t: "Заявка создана" }, { at: ago(1) + "T11:00:00.000Z", by: "hr1", t: "Проверено HR, отправлено директору" }] },
+      { id: "v2", positionName: "Менеджер по продажам", spec: "B2B, горнодобывающие предприятия", profArea: "Продажи", region: COMPANY.city, locality: "Алматы", address: "", count: 1, salaryFrom: 300000, salaryTo: 500000, schedule: "Полный день", employment: "Полная занятость", experience: "От 1 года", education: "Высшее", languages: ["Казахский", "Русский"], qualities: "Коммуникабельность", duties: "Работа с клиентами, участие в тендерах на tizilim.gov.kz, подготовка коммерческих предложений.", pubDays: 30, dept: "Продажи", authorId: "hr1", status: "published", enbekId: "ЭБТ-4821937", approvedAt: ago(9) + "T10:00:00.000Z", publishedAt: ago(9) + "T10:01:00.000Z", history: [{ at: ago(9) + "T10:01:00.000Z", by: "dir1", t: "Согласовано, опубликовано на Enbek" }] },
+    ],
+    log: [],
+    settings: { autoSend: true, autoOrder: true, bin: "", lastSync: null },
+  };
+};
+
+/* ── общий хук отправки ── */
+function useEnbekSender(setEnbek) {
+  const logIt = (service, op, object, res, payload) => setEnbek(x => ({ ...x, log: [{ id: uid(), at: new Date().toISOString(), service, op, object, ok: res.ok, code: res.code || "OK", message: res.message, reqId: rid("REQ"), xml: soapXml(service, op, payload) }, ...x.log].slice(0, 300) }));
+  const sendContractEvent = async (contract, evId) => {
+    const ev = contract.events.find(e => e.id === evId); if (!ev) return;
+    const cur = applyAmend(contract);
+    const payload = { iin: contract.iin, contractNumber: contract.number, contractDate: contract.date, startDate: contract.start, contractType: contract.kind === "fixed" ? "срочный" : "бессрочный", endDate: contract.end, position: ev.changes?.position || cur.position, department: ev.changes?.dept || cur.dept, workplace: contract.workplace, workMode: contract.mode, eventDate: ev.date, docNumber: ev.doc, terminationBasis: ev.basis };
+    setEnbek(x => ({ ...x, contracts: x.contracts.map(c => c.id !== contract.id ? c : { ...c, events: c.events.map(e => e.id === evId ? { ...e, status: "sending", error: "" } : e) }) }));
+    const res = await enbekCall("MINTRUD-S-0356", EV_TYPES[ev.type].op, payload);
+    logIt("MINTRUD-S-0356", EV_TYPES[ev.type].op, `${contract.number} · ИИН ${contract.iin}`, res, payload);
+    setEnbek(x => {
+      const contracts = x.contracts.map(c => c.id !== contract.id ? c : { ...c, events: c.events.map(e => e.id === evId ? { ...e, status: res.ok ? "registered" : "error", esutdId: res.id || "", error: res.ok ? "" : `${res.code}: ${res.message}`, sentAt: new Date().toISOString() } : e) });
+      const esutd = { ...x.esutd };
+      if (res.ok) {
+        const c = contracts.find(k => k.id === contract.id); const now = applyAmend(c);
+        esutd[c.id] = { iin: c.iin, number: c.number, position: now.position, dept: now.dept, salary: now.salary, status: ev.type === "termination" ? "terminated" : "active" };
+      }
+      return { ...x, contracts, esutd };
+    });
+    return res;
+  };
+  const sendVacancy = async (vac, op = "publishVacancy") => {
+    const payload = { enterpriseBin: "", positionName: vac.positionName, positionSpec: vac.spec, profArea: vac.profArea, region: vac.region, locality: vac.locality, address: vac.address, vacantCount: +vac.count, salaryFrom: vac.salaryFrom, salaryTo: vac.salaryTo, schedule: vac.schedule, employment: vac.employment, experience: vac.experience, education: vac.education, languages: vac.languages, personalQualities: vac.qualities, duties: vac.duties, publicationDays: vac.pubDays, enbekId: vac.enbekId };
+    if (op === "publishVacancy") setEnbek(x => ({ ...x, vacancies: x.vacancies.map(v => v.id === vac.id ? { ...v, status: "publishing", error: "" } : v) }));
+    const res = await enbekCall("MINTRUD-S-6167", op, payload);
+    logIt("MINTRUD-S-6167", op, vac.positionName, res, payload);
+    setEnbek(x => ({ ...x, vacancies: x.vacancies.map(v => {
+      if (v.id !== vac.id) return v;
+      const h = [...(v.history || []), { at: new Date().toISOString(), by: "enbek", t: res.ok ? res.message + (res.id ? ` · ${res.id}` : "") : `Ошибка ${res.code}: ${res.message}` }];
+      if (op === "closeVacancy") return { ...v, status: res.ok ? "closed" : v.status, closedAt: new Date().toISOString(), history: h };
+      return { ...v, status: res.ok ? "published" : "error", enbekId: res.id || "", publishedAt: res.ok ? new Date().toISOString() : null, error: res.ok ? "" : `${res.code}: ${res.message}`, history: h };
+    }) }));
+    return res;
+  };
+  return { sendContractEvent, sendVacancy, logIt };
+}
+
+const applyAmend = c => {
+  const cur = { position: c.position, dept: c.dept, salary: c.salary };
+  c.events.filter(e => e.type === "amendment").forEach(e => Object.assign(cur, Object.fromEntries(Object.entries(e.changes || {}).filter(([, v]) => v !== "" && v !== undefined))));
+  return cur;
+};
+const contractState = c => {
+  const term = c.events.find(e => e.type === "termination");
+  const last = c.events[c.events.length - 1];
+  return { terminated: !!term, last, pending: c.events.filter(e => e.status !== "registered") };
+};
+const DueTag = ({ ev }) => {
+  if (ev.status === "registered") return <span style={{ fontSize: 12, color: "var(--tx2)" }}>✓ {ruDate(ev.sentAt)}</span>;
+  const d = daysLeft(evDue(ev));
+  return <Pill tone={d < 0 ? "err" : d <= 1 ? "warn" : "gr"}>{d < 0 ? `просрочено ${-d} дн.` : d === 0 ? "срок сегодня" : `осталось ${d} дн.`}</Pill>;
+};
+
+/* ── Формы договора ── */
+function ContractForm({ init, employees, onSave, onClose, title }) {
+  const [f, setF] = useState(init);
+  const [err, setErr] = useState("");
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const save = () => {
+    if (f.empMode === "new" && !f.newName.trim()) return setErr("Укажите ФИО нового работника");
+    if (f.empMode === "existing" && !f.empId) return setErr("Выберите работника");
+    if (!f.number.trim() || !f.position.trim()) return setErr("Заполните номер договора и должность");
+    onSave(f);
+  };
+  return (
+    <Modal title={title} onClose={onClose} wide>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="tabs" style={{ marginBottom: 0 }}>
+          <button className={`tb ${f.empMode === "existing" ? "act" : ""}`} onClick={() => set("empMode", "existing")}>Работник из портала</button>
+          <button className={`tb ${f.empMode === "new" ? "act" : ""}`} onClick={() => set("empMode", "new")}>Новый работник</button>
+        </div>
+        {f.empMode === "existing" ? (
+          <Field label="Работник"><select className="inp" value={f.empId} onChange={e => set("empId", e.target.value)}><option value="">— выбрать —</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name} · {e.pos}</option>)}</select></Field>
+        ) : (
+          <div className="g2"><Field label="ФИО"><input className="inp" value={f.newName} onChange={e => set("newName", e.target.value)} /></Field><Field label="Телефон"><input className="inp" value={f.newPhone} onChange={e => set("newPhone", e.target.value)} placeholder="+7" /></Field></div>
+        )}
+        <div className="g3">
+          <Field label="ИИН"><input className="inp" inputMode="numeric" maxLength={12} value={f.iin} onChange={e => set("iin", e.target.value.replace(/\D/g, ""))} placeholder="12 цифр" /></Field>
+          <Field label="№ договора"><input className="inp" value={f.number} onChange={e => set("number", e.target.value)} /></Field>
+          <Field label="Дата договора"><input className="inp" type="date" value={f.date} onChange={e => set("date", e.target.value)} /></Field>
+        </div>
+        <div className="g3">
+          <Field label="Должность"><input className="inp" value={f.position} onChange={e => set("position", e.target.value)} /></Field>
+          <Field label="Отдел"><select className="inp" value={f.dept} onChange={e => set("dept", e.target.value)}>{DEPTS.map(d => <option key={d}>{d}</option>)}</select></Field>
+          <Field label="Оклад, ₸"><input className="inp" type="number" value={f.salary} onChange={e => set("salary", +e.target.value)} /></Field>
+        </div>
+        <div className="g3">
+          <Field label="Дата начала работы"><input className="inp" type="date" value={f.start} onChange={e => set("start", e.target.value)} /></Field>
+          <Field label="Срок договора"><select className="inp" value={f.kind} onChange={e => set("kind", e.target.value)}><option value="indefinite">Бессрочный</option><option value="fixed">Срочный</option></select></Field>
+          {f.kind === "fixed" ? <Field label="Дата окончания"><input className="inp" type="date" value={f.end} onChange={e => set("end", e.target.value)} /></Field> : <Field label="Режим"><input className="inp" value={f.mode} onChange={e => set("mode", e.target.value)} /></Field>}
+        </div>
+        <Field label="Место выполнения работы"><input className="inp" value={f.workplace} onChange={e => set("workplace", e.target.value)} /></Field>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--tx)" }}><input type="checkbox" checked={f.makeOrder} onChange={e => set("makeOrder", e.target.checked)} /> Создать приказ Л/С о приёме и отправить директору на подпись</label>
+        {err && <div style={{ fontSize: 12.5, color: "var(--er)" }}>⚠ {err}</div>}
+        <div style={{ fontSize: 12, color: "var(--tx2)" }}>После сохранения сведения сразу уходят в ЕСУТД через MINTRUD-S-0356. Срок по закону — 5 рабочих дней с даты договора.</div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}><button className="btn bo" onClick={onClose}>Отмена</button><button className="btn bp" onClick={save}>Сохранить и отправить в ЕСУТД</button></div>
+      </div>
+    </Modal>
+  );
+}
+
+function EventForm({ contract, type, onSave, onClose }) {
+  const cur = applyAmend(contract);
+  const [f, setF] = useState({ date: todayISO(), doc: "", position: cur.position, dept: cur.dept, salary: cur.salary, basis: TERM_BASIS[0], makeOrder: true });
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const isT = type === "termination";
+  return (
+    <Modal title={`${EV_TYPES[type].label} · ${contract.number}`} onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="g2"><Field label={isT ? "Дата расторжения" : "Дата допсоглашения"}><input className="inp" type="date" value={f.date} onChange={e => set("date", e.target.value)} /></Field><Field label={isT ? "№ приказа / соглашения" : "№ допсоглашения"}><input className="inp" value={f.doc} onChange={e => set("doc", e.target.value)} /></Field></div>
+        {isT ? (
+          <Field label="Основание"><select className="inp" value={f.basis} onChange={e => set("basis", e.target.value)}>{TERM_BASIS.map(b => <option key={b}>{b}</option>)}</select></Field>
+        ) : (
+          <div className="g3"><Field label="Должность"><input className="inp" value={f.position} onChange={e => set("position", e.target.value)} /></Field><Field label="Отдел"><select className="inp" value={f.dept} onChange={e => set("dept", e.target.value)}>{DEPTS.map(d => <option key={d}>{d}</option>)}</select></Field><Field label="Оклад, ₸"><input className="inp" type="number" value={f.salary} onChange={e => set("salary", +e.target.value)} /></Field></div>
+        )}
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--tx)" }}><input type="checkbox" checked={f.makeOrder} onChange={e => set("makeOrder", e.target.checked)} /> Создать приказ Л/С и отправить директору на подпись</label>
+        <div style={{ fontSize: 12, color: "var(--tx2)" }}>Срок внесения в ЕСУТД: {isT ? "3 рабочих дня" : "15 календарных дней"}.</div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}><button className="btn bo" onClick={onClose}>Отмена</button><button className={`btn ${isT ? "bd" : "bp"}`} onClick={() => onSave(f)}>Сохранить и отправить в ЕСУТД</button></div>
+      </div>
+    </Modal>
+  );
+}
+
+function EnbekModule({ user, employees, setEmployees, enbek, setEnbek, orders, setOrders }) {
+  const people = allPeople(employees);
+  const [tab, setTab] = useState("contracts");
+  const [open, setOpen] = useState(null);
+  const [form, setForm] = useState(null);
+  const [evForm, setEvForm] = useState(null);
+  const [xml, setXml] = useState(null);
+  const [q, setQ] = useState("");
+  const [syncRes, setSyncRes] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [toast, setToast] = useState("");
+  const { sendContractEvent, logIt } = useEnbekSender(setEnbek);
+  const flash = m => { setToast(m); setTimeout(() => setToast(""), 4000); };
+  const makeOrder = (title, body, empId) => setOrders(os => [{ id: uid(), type: "LS", num: nextNum(os, "LS", new Date().getFullYear()), year: new Date().getFullYear(), date: todayISO(), title, body, recipients: [empId], deadlineDays: 3, attachments: [], status: "sign", acks: {}, createdBy: user.id, signedBy: null, signedAt: null, returnComment: "" }, ...os]);
+
+  const contracts = enbek.contracts;
+  const allEv = contracts.flatMap(c => c.events.map(e => ({ c, e })));
+  const pend = allEv.filter(x => x.e.status !== "registered");
+  const overdue = pend.filter(x => daysLeft(evDue(x.e)) < 0).length;
+  const errors = pend.filter(x => x.e.status === "error").length;
+
+  const saveContract = async f => {
+    let empId = f.empId;
+    if (f.empMode === "new") { empId = uid(); setEmployees(es => [...es, { id: empId, role: "employee", name: f.newName.trim(), pos: f.position, dept: f.dept, phone: f.newPhone, joinDate: f.start, adaptTasks: [], adaptDone: false }]); }
+    const ev = { id: uid(), type: "conclusion", date: f.date, status: "queued" };
+    const c = { id: uid(), empId, iin: f.iin, number: f.number.trim(), date: f.date, start: f.start, kind: f.kind, end: f.end, position: f.position, dept: f.dept, workplace: f.workplace, salary: f.salary, mode: f.mode, events: [ev], vacancyId: f.vacancyId };
+    setEnbek(x => ({ ...x, contracts: [c, ...x.contracts] }));
+    if (f.makeOrder) makeOrder(`О приёме на работу (${shortName(f.empMode === "new" ? f.newName : personOf(people, empId).name)})`, `1. Принять ${f.empMode === "new" ? f.newName : personOf(people, empId).name} на должность «${f.position}» в подразделение «${f.dept}» с ${ruDate(f.start)}.\n2. Установить должностной оклад ${Number(f.salary || 0).toLocaleString("ru-RU")} ₸.\n3. Основание: трудовой договор № ${f.number} от ${ruDate(f.date)}.`, empId);
+    if (f.vacancyId) setEnbek(x => ({ ...x, vacancies: x.vacancies.map(v => v.id === f.vacancyId ? { ...v, hired: (v.hired || 0) + 1, history: [...(v.history || []), { at: new Date().toISOString(), by: user.id, t: `Принят работник по договору ${f.number}` }] } : v) }));
+    setForm(null);
+    if (enbek.settings.autoSend) { const r = await sendContractEvent(c, ev.id); flash(r && r.ok ? `Договор ${c.number} зарегистрирован в ЕСУТД · ${r.id}` : `ЕСУТД вернула ошибку: ${r ? r.message : ""}`); }
+  };
+  const saveEvent = async (c, type, f) => {
+    const ev = { id: uid(), type, date: f.date, doc: f.doc, status: "queued", basis: type === "termination" ? f.basis : undefined, changes: type === "amendment" ? { position: f.position, dept: f.dept, salary: f.salary } : undefined };
+    const nc = { ...c, events: [...c.events, ev] };
+    setEnbek(x => ({ ...x, contracts: x.contracts.map(k => k.id === c.id ? nc : k) }));
+    const name = personOf(people, c.empId).name;
+    if (f.makeOrder) {
+      if (type === "termination") makeOrder(`О расторжении трудового договора (${shortName(name)})`, `1. Расторгнуть трудовой договор № ${c.number} от ${ruDate(c.date)} с ${name} ${ruDate(f.date)}.\n2. Основание: ${f.basis}.\n3. Бухгалтерии произвести окончательный расчёт.`, c.empId);
+      else makeOrder(`О переводе / изменении условий труда (${shortName(name)})`, `1. Установить ${name} с ${ruDate(f.date)}: должность «${f.position}», подразделение «${f.dept}», оклад ${Number(f.salary || 0).toLocaleString("ru-RU")} ₸.\n2. Основание: дополнительное соглашение${f.doc ? " № " + f.doc : ""} к трудовому договору № ${c.number}.`, c.empId);
+    }
+    if (type === "amendment") setEmployees(es => es.map(e => e.id === c.empId ? { ...e, pos: f.position, dept: f.dept } : e));
+    setEvForm(null);
+    if (enbek.settings.autoSend) { const r = await sendContractEvent(nc, ev.id); flash(r && r.ok ? `${EV_TYPES[type].label} зарегистрировано в ЕСУТД · ${r.id}` : `ЕСУТД вернула ошибку: ${r ? r.message : ""}`); }
+  };
+  const runSync = async () => {
+    setSyncing(true);
+    const res = await enbekCall("MINTRUD-S-3023", "syncContracts", { bin: enbek.settings.bin || "", date: todayISO() });
+    logIt("MINTRUD-S-3023", "syncContracts", `Все договоры (${contracts.length})`, res, { bin: enbek.settings.bin || "", date: todayISO() });
+    const rows = [];
+    contracts.forEach(c => {
+      const s = enbek.esutd[c.id]; const cur = applyAmend(c); const st = contractState(c);
+      if (!s) { rows.push({ kind: "missing", c, text: "Нет в ЕСУТД" }); return; }
+      const diffs = [];
+      [["position", "Должность"], ["dept", "Отдел"], ["salary", "Оклад"]].forEach(([k, l]) => { if (String(s[k]) !== String(cur[k])) diffs.push({ k, l, portal: cur[k], esutd: s[k] }); });
+      if (s.status === "active" && st.terminated && st.last.status === "registered") diffs.push({ k: "status", l: "Статус", portal: "расторгнут", esutd: "действует" });
+      rows.push(diffs.length ? { kind: "diff", c, diffs } : { kind: "ok", c });
+    });
+    Object.entries(enbek.esutd).filter(([k]) => !contracts.some(c => c.id === k)).forEach(([k, s]) => rows.push({ kind: "extra", key: k, s }));
+    setSyncRes({ at: new Date().toISOString(), rows });
+    setEnbek(x => ({ ...x, settings: { ...x.settings, lastSync: new Date().toISOString() } }));
+    setSyncing(false);
+  };
+  const acceptEsutd = r => { setEnbek(x => ({ ...x, contracts: x.contracts.map(c => c.id !== r.c.id ? c : { ...c, ...Object.fromEntries(r.diffs.filter(d => d.k !== "status").map(d => [d.k, d.esutd])), events: c.events.filter(e => e.type !== "amendment") }) })); setSyncRes(s => ({ ...s, rows: s.rows.map(x => x === r ? { kind: "ok", c: r.c } : x) })); };
+  const pushFix = async r => {
+    const ev = { id: uid(), type: "amendment", date: todayISO(), doc: "исправление", status: "queued", changes: Object.fromEntries(r.diffs.filter(d => d.k !== "status").map(d => [d.k, d.portal])) };
+    const nc = { ...r.c, events: [...r.c.events, ev] };
+    setEnbek(x => ({ ...x, contracts: x.contracts.map(k => k.id === nc.id ? nc : k) }));
+    const res = await sendContractEvent(nc, ev.id);
+    if (res && res.ok) setSyncRes(s => ({ ...s, rows: s.rows.map(x => x === r ? { kind: "ok", c: nc } : x) }));
+  };
+  const importExtra = r => {
+    const empId = uid(); const c = { id: r.key, empId, iin: r.s.iin, number: r.s.number, date: todayISO(), start: todayISO(), kind: "indefinite", end: "", position: r.s.position, dept: r.s.dept, workplace: COMPANY.city, salary: r.s.salary, mode: "Полный рабочий день", events: [{ id: uid(), type: "conclusion", date: todayISO(), status: "registered", esutdId: "из ЕСУТД", sentAt: new Date().toISOString() }] };
+    setEmployees(es => [...es, { id: empId, role: "employee", name: r.s.name || `Работник ИИН ${r.s.iin}`, pos: r.s.position, dept: r.s.dept, phone: "", joinDate: todayISO(), adaptTasks: [], adaptDone: false }]);
+    setEnbek(x => ({ ...x, contracts: [...x.contracts, c] }));
+    setSyncRes(s => ({ ...s, rows: s.rows.map(x => x === r ? { kind: "ok", c } : x) }));
+  };
+
+  const cur = open && contracts.find(c => c.id === open);
+  const list = contracts.filter(c => !q || (personOf(people, c.empId).name + c.number + c.iin).toLowerCase().includes(q.toLowerCase()));
+  const tabs = [["contracts", "Договоры ЕСУТД", errors + overdue], ["sync", "Сверка с ЕСУТД"], ["log", "Журнал обмена"], ["conn", "Подключение"]];
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12, padding: "9px 14px", borderRadius: 10, background: "var(--inbg)", color: "var(--in)", fontSize: 12.5, fontWeight: 600 }}>
+        🔗 Сервисы Enbek подключены в тестовом режиме (эмуляция). Обмен, статусы и журнал работают как при реальном подключении через SmartBridge.
+      </div>
+      {toast && <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, background: toast.includes("ошибк") ? "var(--erbg)" : "var(--okbg)", color: toast.includes("ошибк") ? "var(--er)" : "var(--ok)", fontSize: 13, fontWeight: 600 }}>{toast}</div>}
+      <div className="tabs" style={{ flexWrap: "wrap" }}>
+        {tabs.map(([id, l, b]) => <button key={id} className={`tb ${tab === id ? "act" : ""}`} onClick={() => setTab(id)}>{l}{b ? <span style={{ marginLeft: 6, background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 99 }}>{b}</span> : null}</button>)}
+      </div>
+
+      {tab === "contracts" && (
+        <div>
+          <div className="g3" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 12 }}>
+            {[[allEv.filter(x => x.e.status === "registered").length, "Зарегистрировано", "var(--ok)"], [pend.filter(x => x.e.status === "queued" || x.e.status === "sending").length, "В очереди", "var(--in)"], [errors, "Ошибки ЕСУТД", "var(--er)"], [overdue, "Просрочен срок", "var(--er)"]].map(([v, l, c]) => <div key={l} className="sc" style={{ cursor: "default" }}><div className="sv" style={{ color: c }}>{v}</div><div className="sl">{l}</div></div>)}
+          </div>
+          {overdue > 0 && <div style={{ marginBottom: 12, padding: "9px 14px", borderRadius: 10, background: "var(--erbg)", color: "var(--er)", fontSize: 12.5, fontWeight: 600 }}>⚠ Есть просроченные сведения. Штраф за несвоевременное внесение — {FINE_ESUTD}.</div>}
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            <input className="inp" style={{ flex: 1, minWidth: 200 }} placeholder="Поиск: ФИО, № договора, ИИН" value={q} onChange={e => setQ(e.target.value)} aria-label="Поиск договора" />
+            <button className="btn bp" onClick={() => setForm({ empMode: "existing", empId: "", newName: "", newPhone: "", iin: "", number: `ТД-${new Date().getFullYear()}/${pad2(contracts.length + 1)}`, date: todayISO(), start: todayISO(), kind: "indefinite", end: "", position: "", dept: DEPTS[1], salary: 0, workplace: COMPANY.city, mode: "Полный рабочий день", makeOrder: enbek.settings.autoOrder })}>+ Новый трудовой договор</button>
+          </div>
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div className="en-row ord-head"><span>Работник</span><span>Договор</span><span>Должность</span><span>Последнее событие</span><span>Статус ЕСУТД</span><span>Срок</span></div>
+            {list.map(c => { const st = contractState(c); const p = personOf(people, c.empId); const now = applyAmend(c); return (
+              <div key={c.id} className="en-row" onClick={() => setOpen(c.id)}>
+                <span><div style={{ fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 11.5, color: "var(--tx2)" }}>ИИН {c.iin || "—"}</div></span>
+                <span>{c.number}<div style={{ fontSize: 11.5, color: "var(--tx2)" }}>от {ruDate(c.date)}</div></span>
+                <span>{now.position}</span>
+                <span>{EV_TYPES[st.last.type].label}{st.terminated && <div style={{ fontSize: 11.5, color: "var(--tx2)" }}>расторгнут</div>}</span>
+                <span><Pill tone={EV_STATUS[st.last.status].t}>{EV_STATUS[st.last.status].l}</Pill></span>
+                <span><DueTag ev={st.last} /></span>
+              </div>); })}
+          </div>
+        </div>
+      )}
+
+      {tab === "sync" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: "var(--tx2)" }}>MINTRUD-S-3023 · последняя сверка: {enbek.settings.lastSync ? ruDT(enbek.settings.lastSync) : "не проводилась"}</div>
+            <button className="btn bp" onClick={runSync} disabled={syncing}>{syncing ? "Сверяем…" : "⟳ Сверить с ЕСУТД"}</button>
+          </div>
+          {!syncRes ? <div className="card"><div className="emp"><div className="ei">⟳</div>Нажмите «Сверить с ЕСУТД», чтобы сравнить договоры портала с данными ЕСУТД</div></div> : (
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "10px 16px", fontSize: 12.5, color: "var(--tx2)", borderBottom: "1px solid var(--bd)" }}>
+                Совпадает: <b style={{ color: "var(--ok)" }}>{syncRes.rows.filter(r => r.kind === "ok").length}</b> · Расхождения: <b style={{ color: "var(--wn)" }}>{syncRes.rows.filter(r => r.kind === "diff").length}</b> · Нет в ЕСУТД: <b style={{ color: "var(--er)" }}>{syncRes.rows.filter(r => r.kind === "missing").length}</b> · Есть только в ЕСУТД: <b style={{ color: "var(--er)" }}>{syncRes.rows.filter(r => r.kind === "extra").length}</b>
+              </div>
+              {syncRes.rows.map((r, i) => (
+                <div key={i} style={{ padding: "11px 16px", borderBottom: "1px solid var(--bd)", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", color: "var(--tx)", fontSize: 13 }}>
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <div style={{ fontWeight: 600 }}>{r.kind === "extra" ? (r.s.name || "Работник") : personOf(people, r.c.empId).name} <span style={{ fontWeight: 400, color: "var(--tx2)" }}>· {r.kind === "extra" ? r.s.number : r.c.number} · ИИН {r.kind === "extra" ? r.s.iin : r.c.iin}</span></div>
+                    {r.kind === "diff" && r.diffs.map(d => <div key={d.k} style={{ fontSize: 12, color: "var(--tx2)" }}>{d.l}: в портале <b style={{ color: "var(--tx)" }}>{String(d.portal)}</b>, в ЕСУТД <b style={{ color: "var(--wn)" }}>{String(d.esutd)}</b></div>)}
+                    {r.kind === "missing" && <div style={{ fontSize: 12, color: "var(--tx2)" }}>Договор не зарегистрирован в ЕСУТД</div>}
+                    {r.kind === "extra" && <div style={{ fontSize: 12, color: "var(--tx2)" }}>В ЕСУТД договор действует, в портале его нет: {r.s.position}</div>}
+                  </div>
+                  {r.kind === "ok" && <Pill tone="ok">✓ Совпадает</Pill>}
+                  {r.kind === "diff" && <div style={{ display: "flex", gap: 6 }}><button className="btn bp bsm" onClick={() => pushFix(r)}>Отправить данные портала</button><button className="btn bo bsm" onClick={() => acceptEsutd(r)}>Принять из ЕСУТД</button></div>}
+                  {r.kind === "missing" && <button className="btn bp bsm" onClick={() => { setTab("contracts"); setOpen(r.c.id); }}>Открыть договор</button>}
+                  {r.kind === "extra" && <button className="btn bo bsm" onClick={() => importExtra(r)}>Загрузить в портал</button>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "log" && (
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div className="lg-row ord-head"><span>Время</span><span>Сервис</span><span>Операция</span><span>Объект</span><span>Результат</span><span></span></div>
+          {enbek.log.length === 0 && <div className="emp">Обменов пока не было</div>}
+          {enbek.log.map(l => (
+            <div key={l.id} className="lg-row">
+              <span style={{ color: "var(--tx2)" }}>{ruDT(l.at)}</span><span style={{ fontWeight: 600 }}>{l.service}</span><span>{l.op}</span>
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.object}</span>
+              <span><Pill tone={l.ok ? "ok" : "err"}>{l.ok ? "OK" : l.code}</Pill> <span style={{ fontSize: 11.5, color: "var(--tx2)" }}>{l.message}</span></span>
+              <span><button className="btn bo bsm" onClick={() => setXml(l)}>XML</button></span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "conn" && (
+        <div>
+          <div className="card">
+            <div className="ct">Сервисы SmartBridge</div>
+            {ENBEK_SERVICES.map(s => (
+              <div key={s.code} className="ir" style={{ gap: 10, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 220 }}><div style={{ fontSize: 13, fontWeight: 700, color: "var(--tx)" }}>{s.code}</div><div style={{ fontSize: 12, color: "var(--tx2)" }}>{s.name} · {s.sys} · {s.contour}</div></div>
+                <span style={{ fontSize: 11.5, color: "var(--tx2)" }}>последний вызов: {(enbek.log.find(l => l.service === s.code) || {}).at ? ruDT(enbek.log.find(l => l.service === s.code).at) : "—"}</span>
+                <Pill tone="info">● Подключено · эмуляция</Pill>
+              </div>
+            ))}
+          </div>
+          <div className="card">
+            <div className="ct">Настройки обмена</div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--tx)", marginBottom: 8 }}><input type="checkbox" checked={enbek.settings.autoSend} onChange={e => setEnbek(x => ({ ...x, settings: { ...x.settings, autoSend: e.target.checked } }))} /> Отправлять в ЕСУТД сразу после сохранения договора / допсоглашения / расторжения</label>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--tx)", marginBottom: 10 }}><input type="checkbox" checked={enbek.settings.autoOrder} onChange={e => setEnbek(x => ({ ...x, settings: { ...x.settings, autoOrder: e.target.checked } }))} /> Создавать приказ Л/С автоматически</label>
+            <Field label="БИН работодателя" style={{ maxWidth: 260 }}><input className="inp" inputMode="numeric" maxLength={12} value={enbek.settings.bin} onChange={e => setEnbek(x => ({ ...x, settings: { ...x.settings, bin: e.target.value.replace(/\D/g, "") } }))} /></Field>
+          </div>
+          <div className="card">
+            <div className="ct">Переход на реальное подключение</div>
+            {["Сервер портала в РК (промышленная эксплуатация)", "Акт испытаний на соответствие требованиям ИБ", "Транспортный сертификат НУЦ РК для ИС", "Заявки «Подключение вне ЕТС» на SmartBridge по трём сервисам", "Договор с оператором и совместное тестирование", "ЭЦП компании через NCALayer для подписи сведений"].map((t, i) => <div key={i} className="ir"><span style={{ fontSize: 13, color: "var(--tx)" }}>{i + 1}. {t}</span><Pill>ожидает</Pill></div>)}
+          </div>
+        </div>
+      )}
+
+      {cur && (() => { const p = personOf(people, cur.empId); const now = applyAmend(cur); const st = contractState(cur); return (
+        <Modal title={`${cur.number} · ${p.name}`} onClose={() => setOpen(null)} wide>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.2fr)", gap: 16 }} className="ord-grid">
+            <div>
+              {[["ИИН", cur.iin || "—"], ["Дата договора", ruDate(cur.date)], ["Начало работы", ruDate(cur.start)], ["Срок", cur.kind === "fixed" ? `срочный до ${ruDate(cur.end)}` : "бессрочный"], ["Должность", now.position], ["Отдел", now.dept], ["Оклад", `${Number(now.salary || 0).toLocaleString("ru-RU")} ₸`], ["Место работы", cur.workplace], ["Режим", cur.mode]].map(([k, v]) => <div key={k} className="ir"><span style={{ fontSize: 12.5, color: "var(--tx2)" }}>{k}</span><span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx)", textAlign: "right" }}>{v}</span></div>)}
+              {!st.terminated && <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}><button className="btn bo" onClick={() => setEvForm({ c: cur, type: "amendment" })}>+ Допсоглашение</button><button className="btn bd" onClick={() => setEvForm({ c: cur, type: "termination" })}>Расторгнуть</button></div>}
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--tx2)", textTransform: "uppercase", marginBottom: 8 }}>События в ЕСУТД</div>
+              {[...cur.events].reverse().map(e => (
+                <div key={e.id} style={{ padding: 10, borderRadius: 10, background: "var(--sf2)", border: "1px solid var(--bd)", marginBottom: 8, color: "var(--tx)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <b style={{ fontSize: 13 }}>{EV_TYPES[e.type].label} · {ruDate(e.date)}</b>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Pill tone={EV_STATUS[e.status].t}>{EV_STATUS[e.status].l}</Pill><DueTag ev={e} /></div>
+                  </div>
+                  {e.changes && <div style={{ fontSize: 12, color: "var(--tx2)", marginTop: 4 }}>{[e.changes.position, e.changes.dept, e.changes.salary ? Number(e.changes.salary).toLocaleString("ru-RU") + " ₸" : ""].filter(Boolean).join(" · ")}</div>}
+                  {e.basis && <div style={{ fontSize: 12, color: "var(--tx2)", marginTop: 4 }}>{e.basis}</div>}
+                  {e.esutdId && <div style={{ fontSize: 12, color: "var(--ok)", marginTop: 4 }}>Рег. № {e.esutdId}</div>}
+                  {e.error && <div style={{ fontSize: 12, color: "var(--er)", marginTop: 4 }}>{e.error}</div>}
+                  {(e.status === "error" || e.status === "queued") && <button className="btn bp bsm" style={{ marginTop: 8 }} onClick={async () => { const r = await sendContractEvent(enbek.contracts.find(k => k.id === cur.id), e.id); flash(r && r.ok ? `Зарегистрировано в ЕСУТД · ${r.id}` : `ЕСУТД вернула ошибку: ${r ? r.message : ""}`); }}>Отправить {e.status === "error" ? "повторно" : ""}</button>}
+                </div>
+              ))}
+              {st.last.status === "error" && st.last.error && st.last.error.includes("ИИН") && (
+                <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
+                  <Field label="Исправить ИИН" style={{ flex: 1 }}><input className="inp" inputMode="numeric" maxLength={12} defaultValue={cur.iin} id="fixiin" /></Field>
+                  <button className="btn bo" onClick={() => { const v = document.getElementById("fixiin").value.replace(/\D/g, ""); setEnbek(x => ({ ...x, contracts: x.contracts.map(k => k.id === cur.id ? { ...k, iin: v } : k) })); }}>Сохранить</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>); })()}
+      {form && <ContractForm title="Новый трудовой договор" init={form} employees={employees} onClose={() => setForm(null)} onSave={saveContract} />}
+      {evForm && <EventForm contract={evForm.c} type={evForm.type} onClose={() => setEvForm(null)} onSave={f => saveEvent(evForm.c, evForm.type, f)} />}
+      {xml && <Modal title={`${xml.service} · ${xml.op}`} onClose={() => setXml(null)} wide><div style={{ fontSize: 12, color: "var(--tx2)", marginBottom: 8 }}>{ruDT(xml.at)} · {xml.reqId} · {xml.ok ? "OK" : xml.code} — {xml.message}</div><pre style={{ fontSize: 11.5, background: "var(--sf2)", color: "var(--tx)", border: "1px solid var(--bd)", borderRadius: 10, padding: 12, overflow: "auto", maxHeight: 420, whiteSpace: "pre" }}>{xml.xml}</pre></Modal>}
+    </div>
+  );
+}
+
+/* ═════════════════════ ВАКАНСИИ ═════════════════════ */
+function VacancyForm({ init, onSave, onClose, submitLabel }) {
+  const [f, setF] = useState(init);
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const tl = l => set("languages", f.languages.includes(l) ? f.languages.filter(x => x !== l) : [...f.languages, l]);
+  const ok = f.positionName.trim() && f.duties.trim().length >= 20 && +f.count >= 1;
+  return (
+    <Modal title={init.id ? "Заявка на вакансию" : "Новая заявка на вакансию"} onClose={onClose} wide>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="g3">
+          <Field label="Наименование должности *"><input className="inp" value={f.positionName} onChange={e => set("positionName", e.target.value)} /></Field>
+          <Field label="Уточнение должности"><input className="inp" value={f.spec} onChange={e => set("spec", e.target.value)} /></Field>
+          <Field label="Профессиональная область"><select className="inp" value={f.profArea} onChange={e => set("profArea", e.target.value)}>{PROF_AREAS.map(x => <option key={x}>{x}</option>)}</select></Field>
+        </div>
+        <div className="g3">
+          <Field label="Отдел"><select className="inp" value={f.dept} onChange={e => set("dept", e.target.value)}>{DEPTS.map(x => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="Кол-во мест *"><input className="inp" type="number" min={1} value={f.count} onChange={e => set("count", +e.target.value)} /></Field>
+          <Field label="Срок публикации, дней"><input className="inp" type="number" value={f.pubDays} onChange={e => set("pubDays", +e.target.value)} /></Field>
+        </div>
+        <div className="g3">
+          <Field label="Город / район *"><input className="inp" value={f.region} onChange={e => set("region", e.target.value)} /></Field>
+          <Field label="Населённый пункт"><input className="inp" value={f.locality} onChange={e => set("locality", e.target.value)} /></Field>
+          <Field label="Адрес"><input className="inp" value={f.address} onChange={e => set("address", e.target.value)} /></Field>
+        </div>
+        <div className="g3">
+          <Field label="Зарплата от, ₸"><input className="inp" type="number" value={f.salaryFrom} onChange={e => set("salaryFrom", +e.target.value)} /></Field>
+          <Field label="Зарплата до, ₸"><input className="inp" type="number" value={f.salaryTo} onChange={e => set("salaryTo", +e.target.value)} /></Field>
+          <Field label="График"><select className="inp" value={f.schedule} onChange={e => set("schedule", e.target.value)}>{SCHEDULES.map(x => <option key={x}>{x}</option>)}</select></Field>
+        </div>
+        <div className="g3">
+          <Field label="Занятость"><select className="inp" value={f.employment} onChange={e => set("employment", e.target.value)}>{EMPLOYMENT.map(x => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="Опыт"><select className="inp" value={f.experience} onChange={e => set("experience", e.target.value)}>{EXP_LEVELS.map(x => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="Образование"><select className="inp" value={f.education} onChange={e => set("education", e.target.value)}>{EDU_LEVELS.map(x => <option key={x}>{x}</option>)}</select></Field>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx2)", textTransform: "uppercase", marginBottom: 6 }}>Владение языками</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{LANGS.map(l => <button key={l} type="button" className={`nf-btn ${f.languages.includes(l) ? "sel" : ""}`} onClick={() => tl(l)}>{f.languages.includes(l) ? "✓ " : ""}{l}</button>)}</div>
+        </div>
+        <Field label="Должностные обязанности * (не менее 20 символов)"><textarea className="ta" style={{ textTransform: "none" }} value={f.duties} onChange={e => set("duties", e.target.value)} /></Field>
+        <Field label="Личные качества"><input className="inp" value={f.qualities} onChange={e => set("qualities", e.target.value)} /></Field>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}><button className="btn bo" onClick={onClose}>Отмена</button><button className="btn bp" disabled={!ok} onClick={() => onSave(f)}>{submitLabel}</button></div>
+      </div>
+    </Modal>
+  );
+}
+
+function VacanciesModule({ user, employees, setEmployees, enbek, setEnbek, setOrders }) {
+  const people = allPeople(employees);
+  const staff = isStaffRole(user.role); const dir = user.role === "director";
+  const [filter, setFilter] = useState(dir ? "approval" : "all");
+  const [open, setOpen] = useState(null);
+  const [form, setForm] = useState(null);
+  const [hire, setHire] = useState(null);
+  const [comment, setComment] = useState("");
+  const [toast, setToast] = useState("");
+  const { sendVacancy, sendContractEvent } = useEnbekSender(setEnbek);
+  const flash = m => { setToast(m); setTimeout(() => setToast(""), 4000); };
+  const hist = (v, t) => [...(v.history || []), { at: new Date().toISOString(), by: user.id, t }];
+  const upd = (id, patch) => setEnbek(x => ({ ...x, vacancies: x.vacancies.map(v => v.id === id ? (typeof patch === "function" ? patch(v) : { ...v, ...patch }) : v) }));
+  const all = enbek.vacancies.filter(v => staff || dir || v.authorId === user.id);
+  const list = all.filter(v => filter === "all" || v.status === filter).sort((a, b) => (b.history?.slice(-1)[0]?.at || "").localeCompare(a.history?.slice(-1)[0]?.at || ""));
+  const blank = { positionName: "", spec: "", profArea: PROF_AREAS[0], dept: user.dept && DEPTS.includes(user.dept) ? user.dept : DEPTS[1], count: 1, pubDays: 30, region: COMPANY.city, locality: "Алматы", address: "", salaryFrom: 0, salaryTo: 0, schedule: SCHEDULES[0], employment: EMPLOYMENT[0], experience: EXP_LEVELS[0], education: EDU_LEVELS[0], languages: ["Казахский", "Русский"], duties: "", qualities: "" };
+  const saveNew = f => {
+    const status = staff ? "approval" : "review";
+    const v = { ...f, id: uid(), authorId: user.id, status, history: [{ at: new Date().toISOString(), by: user.id, t: staff ? "Создано HR, отправлено директору" : "Заявка создана и отправлена в HR" }] };
+    setEnbek(x => ({ ...x, vacancies: [v, ...x.vacancies] })); setForm(null); flash(staff ? "Вакансия отправлена директору на согласование" : "Заявка отправлена в HR");
+  };
+  const approve = async v => {
+    const nv = { ...v, status: "publishing", approvedAt: new Date().toISOString(), history: hist(v, "Согласовано директором") };
+    upd(v.id, nv); setOpen(null);
+    const r = await sendVacancy(nv);
+    flash(r.ok ? `Вакансия опубликована на Enbek · ${r.id}` : `Enbek вернул ошибку: ${r.message}`);
+  };
+  const cur = open && enbek.vacancies.find(v => v.id === open);
+  const due = v => v.approvedAt ? addWorkDays(v.approvedAt, 5) : null;
+  const counts = s => all.filter(v => v.status === s).length;
+  const hireSave = async f => {
+    let empId = f.empId;
+    if (f.empMode === "new") { empId = uid(); setEmployees(es => [...es, { id: empId, role: "employee", name: f.newName.trim(), pos: f.position, dept: f.dept, phone: f.newPhone, joinDate: f.start, adaptTasks: [], adaptDone: false }]); }
+    const ev = { id: uid(), type: "conclusion", date: f.date, status: "queued" };
+    const c = { id: uid(), empId, iin: f.iin, number: f.number, date: f.date, start: f.start, kind: f.kind, end: f.end, position: f.position, dept: f.dept, workplace: f.workplace, salary: f.salary, mode: f.mode, events: [ev], vacancyId: hire.id };
+    const name = f.empMode === "new" ? f.newName : personOf(people, empId).name;
+    setEnbek(x => ({ ...x, contracts: [c, ...x.contracts], vacancies: x.vacancies.map(v => v.id === hire.id ? { ...v, hired: (v.hired || 0) + 1, history: [...(v.history || []), { at: new Date().toISOString(), by: user.id, t: `Принят(а) ${name} · договор ${f.number}` }] } : v) }));
+    if (f.makeOrder) setOrders(os => [{ id: uid(), type: "LS", num: nextNum(os, "LS", new Date().getFullYear()), year: new Date().getFullYear(), date: todayISO(), title: `О приёме на работу (${shortName(name)})`, body: `1. Принять ${name} на должность «${f.position}» в подразделение «${f.dept}» с ${ruDate(f.start)}.\n2. Установить должностной оклад ${Number(f.salary || 0).toLocaleString("ru-RU")} ₸.\n3. Основание: трудовой договор № ${f.number} от ${ruDate(f.date)}.`, recipients: [empId], deadlineDays: 3, attachments: [], status: "sign", acks: {}, createdBy: user.id, signedBy: null, signedAt: null, returnComment: "" }, ...os]);
+    const hv = hire; setHire(null);
+    const r = await sendContractEvent(c, ev.id);
+    flash(r && r.ok ? `Договор ${f.number} зарегистрирован в ЕСУТД · ${r.id}` : `ЕСУТД вернула ошибку: ${r ? r.message : ""}`);
+    if ((hv.hired || 0) + 1 >= hv.count) { const rr = await sendVacancy(hv, "closeVacancy"); if (rr.ok) flash(`Все места заняты — вакансия снята с Enbek`); }
+  };
+  return (
+    <div>
+      <div style={{ marginBottom: 12, padding: "9px 14px", borderRadius: 10, background: "var(--inbg)", color: "var(--in)", fontSize: 12.5, fontWeight: 600 }}>🔗 Публикация на Электронной бирже труда через MINTRUD-S-6167 · тестовый режим (эмуляция). Срок размещения — 5 рабочих дней с появления вакансии.</div>
+      {toast && <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, background: toast.includes("ошибк") ? "var(--erbg)" : "var(--okbg)", color: toast.includes("ошибк") ? "var(--er)" : "var(--ok)", fontSize: 13, fontWeight: 600 }}>{toast}</div>}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[["all", "Все", all.length], ["review", "У HR", counts("review")], ["approval", "На согласовании", counts("approval")], ["published", "На Enbek", counts("published")], ["error", "Ошибки", counts("error")], ["closed", "Закрытые", counts("closed")]].map(([k, l, n]) => <button key={k} className={`nf-btn ${filter === k ? "sel" : ""}`} onClick={() => setFilter(k)}>{l} · {n}</button>)}
+        </div>
+        {!dir && <button className="btn bp" onClick={() => setForm(blank)}>+ {staff ? "Новая вакансия" : "Заявка на вакансию"}</button>}
+      </div>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="vac-row ord-head"><span>Должность</span><span>Отдел</span><span>Мест</span><span>Статус</span><span>Enbek</span><span>Срок</span></div>
+        {list.length === 0 && <div className="emp">Вакансий нет</div>}
+        {list.map(v => { const d = due(v); const late = d && !["published", "closed"].includes(v.status) && new Date() > new Date(d); return (
+          <div key={v.id} className="vac-row" onClick={() => setOpen(v.id)}>
+            <span><div style={{ fontWeight: 600 }}>{v.positionName}</div><div style={{ fontSize: 11.5, color: "var(--tx2)" }}>{v.spec || v.profArea} · от {shortName(personOf(people, v.authorId).name)}</div></span>
+            <span style={{ color: "var(--tx2)" }}>{v.dept}</span><span>{v.hired ? `${v.hired}/` : ""}{v.count}</span>
+            <span><Pill tone={VAC_STATUS[v.status].t}>{VAC_STATUS[v.status].l}</Pill></span>
+            <span style={{ fontSize: 12.5 }}>{v.enbekId || "—"}</span>
+            <span style={{ fontSize: 12.5, color: late ? "var(--er)" : "var(--tx2)" }}>{v.status === "published" ? `с ${ruDate(v.publishedAt)}` : d ? `до ${ruDate(d)}${late ? " · просрочено" : ""}` : "—"}</span>
+          </div>); })}
+      </div>
+      {cur && (
+        <Modal title={cur.positionName} onClose={() => setOpen(null)} wide>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16 }} className="ord-grid">
+            <div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}><Pill tone={VAC_STATUS[cur.status].t}>{VAC_STATUS[cur.status].l}</Pill>{cur.enbekId && <Pill tone="ok">{cur.enbekId}</Pill>}<Pill>{cur.dept}</Pill></div>
+              {[["Уточнение", cur.spec], ["Проф. область", cur.profArea], ["Мест", cur.count], ["Город / район", cur.region], ["Населённый пункт", cur.locality], ["Адрес", cur.address], ["Зарплата", cur.salaryFrom || cur.salaryTo ? `${Number(cur.salaryFrom || 0).toLocaleString("ru-RU")} – ${Number(cur.salaryTo || 0).toLocaleString("ru-RU")} ₸` : "—"], ["График / занятость", `${cur.schedule} · ${cur.employment}`], ["Опыт / образование", `${cur.experience} · ${cur.education}`], ["Языки", (cur.languages || []).join(", ")], ["Личные качества", cur.qualities], ["Публикация", `${cur.pubDays} дней`]].map(([k, v]) => <div key={k} className="ir"><span style={{ fontSize: 12.5, color: "var(--tx2)" }}>{k}</span><span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx)", textAlign: "right", marginLeft: 10 }}>{v || "—"}</span></div>)}
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--tx2)", textTransform: "uppercase", margin: "10px 0 4px" }}>Обязанности</div>
+              <div style={{ fontSize: 13, color: "var(--tx)", lineHeight: 1.5 }}>{cur.duties}</div>
+              {cur.error && <div style={{ marginTop: 10, fontSize: 12.5, padding: 10, borderRadius: 9, background: "var(--erbg)", color: "var(--er)" }}>Enbek: {cur.error}</div>}
+              {cur.comment && cur.status === "returned" && <div style={{ marginTop: 10, fontSize: 12.5, padding: 10, borderRadius: 9, background: "var(--erbg)", color: "var(--er)" }}>Замечание: {cur.comment}</div>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--tx2)", textTransform: "uppercase" }}>История</div>
+              {(cur.history || []).map((h, i) => <div key={i} style={{ fontSize: 12, color: "var(--tx)", padding: "6px 8px", borderRadius: 8, background: "var(--sf2)" }}><span style={{ color: "var(--tx2)" }}>{ruDT(h.at)} · {h.by === "enbek" ? "Enbek" : shortName(personOf(people, h.by).name)}</span><br />{h.t}</div>)}
+              <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: "auto" }}>
+                {staff && ["review", "returned", "error", "draft"].includes(cur.status) && <button className="btn bo" onClick={() => { setForm(cur); setOpen(null); }}>✏️ Редактировать</button>}
+                {staff && ["review", "returned"].includes(cur.status) && <button className="btn bp" onClick={() => { upd(cur.id, v => ({ ...v, status: "approval", history: hist(v, "Проверено HR, отправлено директору") })); setOpen(null); }}>Отправить директору на согласование</button>}
+                {staff && cur.status === "error" && <button className="btn bp" onClick={async () => { setOpen(null); const r = await sendVacancy(cur); flash(r.ok ? `Вакансия опубликована на Enbek · ${r.id}` : `Enbek вернул ошибку: ${r.message}`); }}>Отправить на Enbek повторно</button>}
+                {dir && cur.status === "approval" && <>
+                  <button className="btn bp" style={{ height: 44 }} onClick={() => approve(cur)}>Согласовать и опубликовать на Enbek</button>
+                  <textarea className="ta" placeholder="Замечание (при возврате)" value={comment} onChange={e => setComment(e.target.value)} style={{ minHeight: 60 }} />
+                  <button className="btn bd" disabled={!comment.trim()} onClick={() => { upd(cur.id, v => ({ ...v, status: "returned", comment, history: hist(v, "Возвращено: " + comment) })); setComment(""); setOpen(null); }}>Вернуть на доработку</button>
+                </>}
+                {staff && cur.status === "published" && <>
+                  <button className="btn bp" onClick={() => { setHire(cur); setOpen(null); }}>Принять кандидата → трудовой договор</button>
+                  <button className="btn bo" onClick={async () => { setOpen(null); const r = await sendVacancy(cur, "closeVacancy"); flash(r.ok ? "Вакансия снята с публикации на Enbek" : `Enbek вернул ошибку: ${r.message}`); }}>Снять с публикации</button>
+                </>}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {form && <VacancyForm init={form} onClose={() => setForm(null)} submitLabel={form.id ? "Сохранить" : staff ? "Отправить директору" : "Отправить в HR"} onSave={f => { if (f.id) { upd(f.id, v => ({ ...f, status: v.status === "error" ? "error" : v.status, history: hist(v, "Изменено HR") })); setForm(null); } else saveNew(f); }} />}
+      {hire && <ContractForm title={`Приём по вакансии: ${hire.positionName}`} employees={employees} onClose={() => setHire(null)} onSave={hireSave}
+        init={{ empMode: "new", empId: "", newName: "", newPhone: "", iin: "", number: `ТД-${new Date().getFullYear()}/${pad2(enbek.contracts.length + 1)}`, date: todayISO(), start: todayISO(), kind: "indefinite", end: "", position: hire.positionName, dept: hire.dept, salary: hire.salaryFrom || 0, workplace: [hire.region, hire.address].filter(Boolean).join(", "), mode: hire.schedule, makeOrder: enbek.settings.autoOrder, vacancyId: hire.id }} />}
+    </div>
+  );
+}
+
 function Login({ onLogin, employees, lang, setLang }) {
   const t = I18N[lang];
   const [mode, setMode] = useState("demo");
@@ -4956,6 +5570,7 @@ export default function App() {
   const [orders, setOrders] = useStored("mka_orders", INIT_ORDERS);
   const [td, setTd] = useStored("mka_time", INIT_TIME);
   const [policies, setPolicies] = useStored("mka_policies", INIT_POLICIES);
+  const [enbek, setEnbek] = useStored("mka_enbek", INIT_ENBEK);
   const [mod, setMod] = useState("home");
   const [open, setOpen] = useState(true);
   const [mob, setMob] = useState(false);
@@ -4974,28 +5589,32 @@ export default function App() {
   const myPolicies = policies.filter(p => !p.acks[user.id]).length;
   const toSign = orders.filter(o => o.status === "sign").length;
   const newReq = td.requests.filter(r => r.status === "new").length;
+  const enbekAlerts = enbek.contracts.flatMap(c => c.events).filter(e => e.status === "error" || (e.status !== "registered" && daysLeft(evDue(e)) < 0)).length;
+  const vacReview = enbek.vacancies.filter(v => v.status === "review" || v.status === "error").length;
+  const vacApproval = enbek.vacancies.filter(v => v.status === "approval").length;
 
   const empNav = [
     { id: "home", icon: "🏠" }, { id: "news", icon: "📰", badge: pinned }, { id: "adaptation", icon: "🌱" }, { id: "annual", icon: "📊" },
     { id: "development", icon: "🎯" }, { id: "learning", icon: "📚" }, { id: "orders", icon: "📜", badge: myOrders }, { id: "time", icon: "⏱️" },
-    { id: "policies", icon: "📘", badge: myPolicies },
+    { id: "policies", icon: "📘", badge: myPolicies }, { id: "vacancies", icon: "💼" },
     { id: "tickets", icon: "📨", badge: tickets.filter(x => x.authorId === user.id && x.status === "in_progress").length || 0 },
     { id: "surveys", icon: "📝" }, { id: "profile", icon: "👤" },
   ];
   const hrNav = [
     { id: "home", icon: "🏠" }, { id: "news", icon: "📰", badge: pinned }, { id: "hr", icon: "👥", badge: empNoAdapt },
-    { id: "orders", icon: "📜", badge: orders.filter(o => o.status === "returned").length }, { id: "time", icon: "⏱️", badge: newReq }, { id: "policies", icon: "📘" },
+    { id: "orders", icon: "📜", badge: orders.filter(o => o.status === "returned").length }, { id: "vacancies", icon: "💼", badge: vacReview }, { id: "enbek", icon: "🔗", badge: enbekAlerts },
+    { id: "time", icon: "⏱️", badge: newReq }, { id: "policies", icon: "📘" },
     { id: "reports", icon: "📈" }, { id: "tickets", icon: "📨", badge: tickets.filter(x => x.status === "new" && x.messages.length === 0).length || 0 },
     { id: "surveys", icon: "📝" }, { id: "profile", icon: "👤" },
   ];
   const adminNav = [
     { id: "home", icon: "🏠" }, { id: "news", icon: "📰" }, { id: "admin", icon: "⚙️" }, { id: "hr", icon: "👥", label: t.hrmod },
-    { id: "orders", icon: "📜" }, { id: "time", icon: "⏱️", badge: newReq }, { id: "policies", icon: "📘" }, { id: "reports", icon: "📈" },
+    { id: "orders", icon: "📜" }, { id: "vacancies", icon: "💼", badge: vacReview }, { id: "enbek", icon: "🔗", badge: enbekAlerts }, { id: "time", icon: "⏱️", badge: newReq }, { id: "policies", icon: "📘" }, { id: "reports", icon: "📈" },
     { id: "tickets", icon: "📨", badge: tickets.filter(x => x.status === "new" && x.messages.length === 0).length || 0 },
     { id: "surveys", icon: "📝" }, { id: "profile", icon: "👤" },
   ];
   const dirNav = [
-    { id: "home", icon: "🏠" }, { id: "orders_sign", icon: "✍️", label: t.sign, badge: toSign }, { id: "orders", icon: "📜", label: t.journal },
+    { id: "home", icon: "🏠" }, { id: "orders_sign", icon: "✍️", label: t.sign, badge: toSign }, { id: "orders", icon: "📜", label: t.journal }, { id: "vacancies", icon: "💼", badge: vacApproval },
     { id: "policies", icon: "📘" }, { id: "reports", icon: "📈" }, { id: "news", icon: "📰" }, { id: "profile", icon: "👤" },
   ];
   const navItems = user.role === "admin" ? adminNav : user.role === "hr" ? hrNav : user.role === "director" ? dirNav : empNav;
@@ -5005,6 +5624,7 @@ export default function App() {
     news: t.s_news, adaptation: t.s_adaptation, annual: t.s_annual, development: t.s_development, learning: t.s_learning, profile: t.s_profile,
     tickets: staff ? t.s_tickets_hr : t.s_tickets, surveys: t.s_surveys, reports: t.s_reports, hr: t.s_hr, admin: t.s_admin,
     orders: staff ? t.s_orders_hr : user.role === "director" ? t.s_orders_dir : t.s_orders, orders_sign: t.s_sign,
+    vacancies: t.s_vacancies, enbek: t.s_enbek,
     time: staff ? t.s_time_hr : t.s_time, policies: staff || user.role === "director" ? t.s_policies_hr : t.s_policies,
   };
   const head = { orders_sign: t.sign, orders: user.role === "director" ? t.journal : t.orders, hr: user.role === "admin" ? t.hrmod : t.hr };
@@ -5072,6 +5692,8 @@ export default function App() {
           {mod === "orders" && <OrdersModule {...shared} view="journal" />}
           {mod === "orders_sign" && <OrdersModule {...shared} view="sign" />}
           {mod === "time" && <TimeModule user={user} td={td} setTd={setTd} employees={employees} />}
+          {mod === "vacancies" && <VacanciesModule user={user} employees={employees} setEmployees={setEmployees} enbek={enbek} setEnbek={setEnbek} setOrders={setOrders} />}
+          {mod === "enbek" && <EnbekModule user={user} employees={employees} setEmployees={setEmployees} enbek={enbek} setEnbek={setEnbek} orders={orders} setOrders={setOrders} />}
           {mod === "policies" && <PoliciesModule user={user} policies={policies} setPolicies={setPolicies} employees={employees} />}
           {mod === "profile" && (
             <div>
